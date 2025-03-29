@@ -5,7 +5,7 @@ import requests
 import os
 from dotenv import load_dotenv
 import time
-from datetime import datetime, timedelta
+from datetime import datetime
 
 # Tenta carregar variáveis do .env (caso esteja local)
 load_dotenv()
@@ -31,36 +31,20 @@ if 'update_interval' not in st.session_state:
 if st.session_state.auto_update:
     st_autorefresh(interval=st.session_state.update_interval * 1000, key="autorefresh")
 
-# Funções auxiliares
-
-# Autenticação - Removido o cache e retorna token + expiração
-def autenticar():
-    """Autentica no Firebase e retorna idToken e tempo de expiração em segundos."""
-    auth_url = f"https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key={API_KEY}"
-    payload = {"email": EMAIL, "password": SENHA, "returnSecureToken": True}
-    res = requests.post(auth_url, json=payload)
-    res.raise_for_status()
-    data = res.json()
-    # Retorna o idToken e o expiresIn (convertido para int)
-    return data["idToken"], int(data["expiresIn"])
-
-def _is_token_expired(margin_seconds=60):
-    """Verifica se o token na session_state expirou ou está prestes a expirar."""
-    if "firebase_token_expires_at" not in st.session_state:
-        return True
-    return datetime.now() >= (st.session_state.firebase_token_expires_at - timedelta(seconds=margin_seconds))
-
+# Função para autenticação com gerenciamento de expiração
 def gerenciar_token_firebase():
-    """Obtém um token válido, autenticando se necessário."""
-    if 'firebase_token' not in st.session_state or _is_token_expired():
-        try:
-            st.session_state.firebase_token, expires_in = autenticar()
-            st.session_state.firebase_token_expires_at = datetime.now() + timedelta(seconds=expires_in)
-            st.sidebar.success("✅ Token Firebase renovado!") # Feedback visual
-        except Exception as e:
-            st.sidebar.error(f"Erro crítico ao autenticar/renovar token: {e}")
-            st.stop() # Impede a execução se não conseguir autenticar
-    return st.session_state.firebase_token
+    agora = time.time()
+    if "auth_token" in st.session_state and "token_expira_em" in st.session_state:
+        if agora < st.session_state.token_expira_em:
+            return st.session_state.auth_token
+
+    auth_url = f"https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key={API_KEY}"
+    res = requests.post(auth_url, json={"email": EMAIL, "password": SENHA, "returnSecureToken": True})
+    res.raise_for_status()
+    dados = res.json()
+    st.session_state.auth_token = dados["idToken"]
+    st.session_state.token_expira_em = agora + 3500  # renova antes de 1h
+    return st.session_state.auth_token
 
 def buscar_status_atual(token):
     url = f"{FIREBASE_URL}/status_atual.json?auth={token}"
@@ -68,23 +52,48 @@ def buscar_status_atual(token):
     res.raise_for_status()
     return res.json()
 
+def buscar_contador_diario(token):
+    hoje = datetime.now().strftime("%Y-%m-%d")
+    url = f"{FIREBASE_URL}/batalha_estado/contador_diario/{hoje}.json?auth={token}"
+    try:
+        res = requests.get(url)
+        res.raise_for_status()
+        return res.json() or 0
+    except:
+        return 0
+
 def sinalizar_batalha(token):
+    # Atualiza o contador diário antes de sinalizar
+    hoje = datetime.now().strftime("%Y-%m-%d")
+    contador_url = f"{FIREBASE_URL}/batalha_estado/contador_diario/{hoje}.json?auth={token}"
+    try:
+        res_get = requests.get(contador_url)
+        atual = res_get.json() if res_get.ok else 0
+        novo_valor = (atual or 0) + 1
+        requests.put(contador_url, json=novo_valor)
+    except Exception as e:
+        st.warning(f"Não foi possível atualizar o contador de batalhas: {e}")
+
+    # Sinaliza a batalha
     url = f"{FIREBASE_URL}/batalha_estado.json?auth={token}"
     res = requests.patch(url, json={"nova_batalha": True})
     return res.status_code == 200
 
-# --- FLUXO PRINCIPAL ---
+# Autenticar com controle
+try:
+    auth_token = gerenciar_token_firebase()
+    st.sidebar.success("✅ Autenticado com sucesso")
+except Exception as e:
+    st.sidebar.error(f"Erro ao autenticar: {e}")
+    st.stop()
 
-# Gerencia e obtém o token atual
-auth_token = gerenciar_token_firebase()
-
-# Buscar status com o token gerenciado
+# Buscar status e contador
 try:
     status = buscar_status_atual(auth_token)
+    batalhas_hoje = buscar_contador_diario(auth_token)
 except Exception as e:
-    st.sidebar.error(f"Erro ao buscar status: {e}")
-    # Decide se quer parar ou continuar com status vazio
-    status = {} # Permite que a interface tente renderizar mesmo com erro
+    st.sidebar.error(f"Erro ao buscar dados: {e}")
+    st.stop()
 
 tocando = status.get("tocando_agora", {})
 
@@ -104,31 +113,26 @@ st.sidebar.write(f"**Reserva:** {status.get('reserva', '?')}")
 st.sidebar.write(f"**Vencedora anterior:** {status.get('vencedora_ultima_batalha', '?')}")
 st.sidebar.write("**Todos os vídeos:**")
 
-current_index = tocando.get("index", -1) # Usar -1 se não houver índice
 for i, v in enumerate(status.get("videos_playlist", [])):
-    prefixo = "🔊 " if i == current_index else ""
-    marcador = "**" if i == current_index else ""
+    prefixo = "🔊 " if i == tocando.get("index") else ""
+    marcador = "**" if i == tocando.get("index") else ""
     st.sidebar.markdown(f"- {prefixo}{marcador}[{v['title']}](https://youtu.be/{v['videoId']}){marcador}")
 
 st.sidebar.caption(f"🕒 Última batalha: {status.get('timestamp', '---')}")
+st.sidebar.caption(f"📊 Batalhas hoje: {batalhas_hoje} de 50")
 
 # Player YouTube
 playlist_id = "PLCcM9n2mu2uHA6fuInzsrEOhiTq7Dsd97"
 
-# **Importante**: Passar o token atual para o JavaScript
-# Note que o token pode mudar, então a string HTML precisa ser gerada a cada execução
 player_html = f"""
-<div id="player"></div>
+<div id=\"player\"></div>
 <script>
   var tag = document.createElement('script');
-  tag.src = "https://www.youtube.com/iframe_api";
+  tag.src = \"https://www.youtube.com/iframe_api\";
   var firstScriptTag = document.getElementsByTagName('script')[0];
   firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
 
   var player;
-  // Passar o token ATUALIZADO para o JavaScript
-  const currentAuthToken = "{auth_token}";
-
   function onYouTubeIframeAPIReady() {{
     player = new YT.Player('player', {{
       height: '394',
@@ -155,15 +159,14 @@ player_html = f"""
         timestamp: new Date().toISOString()
       }};
 
-      // Usa o token atualizado passado do Python
-      fetch("{FIREBASE_URL}/status_atual/tocando_agora.json?auth=" + currentAuthToken, {{
+      fetch("{FIREBASE_URL}/status_atual/tocando_agora.json?auth={auth_token}", {{
         method: 'PUT',
         headers: {{ 'Content-Type': 'application/json' }},
         body: JSON.stringify(videoData)
       }});
 
       if (index === 2) {{
-        fetch("{FIREBASE_URL}/batalha_estado.json?auth=" + currentAuthToken, {{
+        fetch("{FIREBASE_URL}/batalha_estado.json?auth={auth_token}", {{
           method: 'PATCH',
           headers: {{ 'Content-Type': 'application/json' }},
           body: JSON.stringify({{ nova_batalha: true }})
@@ -188,7 +191,6 @@ components.html(player_html, height=420)
 col1, col2 = st.columns([1, 1])
 
 if col1.button("🔥 Iniciar nova batalha"):
-    # Usa o token gerenciado aqui também
     if sinalizar_batalha(auth_token):
         st.success("✅ Batalha sinalizada com sucesso!")
         st.rerun()
