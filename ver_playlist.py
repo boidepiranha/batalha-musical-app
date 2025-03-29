@@ -126,6 +126,22 @@ player_html = f"""
         headers: {{ 'Content-Type': 'application/json' }},
         body: JSON.stringify(videoData)
       }});
+
+      if (index === 2) {{
+        fetch("{FIREBASE_URL}/batalha_estado.json?auth={auth_token}", {{
+          method: 'PATCH',
+          headers: {{ 'Content-Type': 'application/json' }},
+          body: JSON.stringify({{ nova_batalha: true }})
+        }});
+      }}
+    }}
+
+    if (event.data === YT.PlayerState.ENDED) {{
+      const index = player.getPlaylistIndex();
+      const total = player.getPlaylist().length;
+      if (index === total - 1) {{
+        setTimeout(() => location.reload(), 1500);
+      }}
     }}
   }}
 </script>
