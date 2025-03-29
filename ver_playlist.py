@@ -6,13 +6,19 @@ import os
 from dotenv import load_dotenv
 import time
 
-# Carregar variáveis de ambiente do arquivo .env
+# Tenta carregar variáveis do .env (caso esteja local)
 load_dotenv()
 
-EMAIL = st.secrets["FIREBASE_EMAIL"]
-SENHA = st.secrets["FIREBASE_SENHA"]
-API_KEY = st.secrets["FIREBASE_API_KEY"]
-FIREBASE_URL = st.secrets["FIREBASE_DB_URL"]
+def get_secret(key: str, fallback: str = None):
+    if key in st.secrets:
+        return st.secrets[key]
+    return os.getenv(key, fallback)
+
+# Agora use essa função para acessar segredos
+EMAIL = get_secret("FIREBASE_EMAIL")
+SENHA = get_secret("FIREBASE_SENHA")
+API_KEY = get_secret("FIREBASE_API_KEY")
+FIREBASE_URL = get_secret("FIREBASE_DB_URL", "https://batalha-musical-default-rtdb.firebaseio.com")
 
 # Controle de atualização automática
 if 'auto_update' not in st.session_state:
