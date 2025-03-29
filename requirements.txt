@@ -1,0 +1,4 @@
+streamlit
+treamlit-autorefresh
+requests
+python-dotenv 
