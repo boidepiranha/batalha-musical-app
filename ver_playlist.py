@@ -9,10 +9,10 @@ import time
 # Carregar variáveis de ambiente do arquivo .env
 load_dotenv()
 
-EMAIL = os.getenv("FIREBASE_EMAIL")
-SENHA = os.getenv("FIREBASE_SENHA")
-API_KEY = os.getenv("FIREBASE_API_KEY")
-FIREBASE_URL = os.getenv("FIREBASE_DB_URL", "https://batalha-musical-default-rtdb.firebaseio.com")
+EMAIL = st.secrets["FIREBASE_EMAIL"]
+SENHA = st.secrets["FIREBASE_SENHA"]
+API_KEY = st.secrets["FIREBASE_API_KEY"]
+FIREBASE_URL = st.secrets["FIREBASE_DB_URL"]
 
 # Controle de atualização automática
 if 'auto_update' not in st.session_state:
