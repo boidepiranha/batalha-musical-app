@@ -5,33 +5,41 @@ import requests
 import os
 from dotenv import load_dotenv
 import time
-from datetime import datetime
+from datetime import datetime, UTC
+import logging
 
-# Tenta carregar variáveis do .env (caso esteja local)
+# --- Logging Configuration to Suppress Secrets Warning ---
+streamlit_logger = logging.getLogger('streamlit')
+class SecretsWarningFilter(logging.Filter):
+    def filter(self, record):
+        return "No secrets found. Valid paths for a secrets.toml file" not in record.getMessage()
+streamlit_logger.addFilter(SecretsWarningFilter())
+
+# --- Load .env if running locally ---
 load_dotenv()
 
 def get_secret(key: str, fallback: str = None):
-    if key in st.secrets:
-        return st.secrets[key]
+    try:
+        if key in st.secrets:
+            return st.secrets[key]
+    except FileNotFoundError:
+        pass
     return os.getenv(key, fallback)
 
-# Agora use essa função para acessar segredos
 EMAIL = get_secret("FIREBASE_EMAIL")
 SENHA = get_secret("FIREBASE_SENHA")
 API_KEY = get_secret("FIREBASE_API_KEY")
 FIREBASE_URL = get_secret("FIREBASE_DB_URL", "https://batalha-musical-default-rtdb.firebaseio.com")
 
-# Controle de atualização automática
+# --- Auto Refresh Setup ---
 if 'auto_update' not in st.session_state:
     st.session_state.auto_update = True
-
 if 'update_interval' not in st.session_state:
-    st.session_state.update_interval = 5  # segundos
-
+    st.session_state.update_interval = 5
 if st.session_state.auto_update:
     st_autorefresh(interval=st.session_state.update_interval * 1000, key="autorefresh")
 
-# Função para autenticação com gerenciamento de expiração
+# --- Auth with Firebase, session-aware ---
 def gerenciar_token_firebase():
     agora = time.time()
     if "auth_token" in st.session_state and "token_expira_em" in st.session_state:
@@ -43,7 +51,7 @@ def gerenciar_token_firebase():
     res.raise_for_status()
     dados = res.json()
     st.session_state.auth_token = dados["idToken"]
-    st.session_state.token_expira_em = agora + 3500  # renova antes de 1h
+    st.session_state.token_expira_em = agora + 3500
     return st.session_state.auth_token
 
 def buscar_status_atual(token):
@@ -53,33 +61,26 @@ def buscar_status_atual(token):
     return res.json()
 
 def buscar_contador_diario(token):
-    hoje = datetime.now().strftime("%Y-%m-%d")
+    # Use timezone-aware UTC datetime object (modern approach)
+    hoje = datetime.now(UTC).strftime("%Y-%m-%d")
     url = f"{FIREBASE_URL}/batalha_estado/contador_diario/{hoje}.json?auth={token}"
     try:
         res = requests.get(url)
-        res.raise_for_status()
+        res.raise_for_status() # Check for HTTP errors
+        # Handle case where node exists but is null, or doesn't exist (res.json() might be None or raise error on 404 if raise_for_status isn't hit)
         return res.json() or 0
-    except:
+    except requests.exceptions.RequestException as e:
+        # If the node doesn't exist (404), return 0. Otherwise log warning.
+        if e.response is not None and e.response.status_code == 404:
+            return 0
+        else:
+            st.warning(f"Aviso: Não foi possível buscar contador diário: {e}")
+            return 0 # Fallback to 0 on other errors
+    except ValueError:
+        # Handle cases where response is not valid JSON
+        st.warning("Aviso: Resposta inválida ao buscar contador diário (não JSON).")
         return 0
 
-def sinalizar_batalha(token):
-    # Atualiza o contador diário antes de sinalizar
-    hoje = datetime.now().strftime("%Y-%m-%d")
-    contador_url = f"{FIREBASE_URL}/batalha_estado/contador_diario/{hoje}.json?auth={token}"
-    try:
-        res_get = requests.get(contador_url)
-        atual = res_get.json() if res_get.ok else 0
-        novo_valor = (atual or 0) + 1
-        requests.put(contador_url, json=novo_valor)
-    except Exception as e:
-        st.warning(f"Não foi possível atualizar o contador de batalhas: {e}")
-
-    # Sinaliza a batalha
-    url = f"{FIREBASE_URL}/batalha_estado.json?auth={token}"
-    res = requests.patch(url, json={"nova_batalha": True})
-    return res.status_code == 200
-
-# Autenticar com controle
 try:
     auth_token = gerenciar_token_firebase()
     st.sidebar.success("✅ Autenticado com sucesso")
@@ -87,7 +88,6 @@ except Exception as e:
     st.sidebar.error(f"Erro ao autenticar: {e}")
     st.stop()
 
-# Buscar status e contador
 try:
     status = buscar_status_atual(auth_token)
     batalhas_hoje = buscar_contador_diario(auth_token)
@@ -97,7 +97,6 @@ except Exception as e:
 
 tocando = status.get("tocando_agora", {})
 
-# Sidebar
 st.sidebar.markdown("### 🎬 Tocando agora")
 if tocando:
     st.sidebar.write(f"**{tocando.get('title', '?')}**")
@@ -112,7 +111,6 @@ st.sidebar.write(f"**Arena:** {status.get('arena', ['?', '?'])[0]} vs {status.ge
 st.sidebar.write(f"**Reserva:** {status.get('reserva', '?')}")
 st.sidebar.write(f"**Vencedora anterior:** {status.get('vencedora_ultima_batalha', '?')}")
 st.sidebar.write("**Todos os vídeos:**")
-
 for i, v in enumerate(status.get("videos_playlist", [])):
     prefixo = "🔊 " if i == tocando.get("index") else ""
     marcador = "**" if i == tocando.get("index") else ""
@@ -121,7 +119,6 @@ for i, v in enumerate(status.get("videos_playlist", [])):
 st.sidebar.caption(f"🕒 Última batalha: {status.get('timestamp', '---')}")
 st.sidebar.caption(f"📊 Batalhas hoje: {batalhas_hoje} de 50")
 
-# Player YouTube
 playlist_id = "PLCcM9n2mu2uHA6fuInzsrEOhiTq7Dsd97"
 
 player_html = f"""
@@ -166,11 +163,57 @@ player_html = f"""
       }});
 
       if (index === 2) {{
-        fetch("{FIREBASE_URL}/batalha_estado.json?auth={auth_token}", {{
-          method: 'PATCH',
-          headers: {{ 'Content-Type': 'application/json' }},
-          body: JSON.stringify({{ nova_batalha: true }})
-        }});
+        console.log("Index 2 detected. Attempting to increment counter and signal battle...");
+        const hoje = new Date().toISOString().split('T')[0];
+        const contadorUrl = "{FIREBASE_URL}/batalha_estado/contador_diario/" + hoje + ".json?auth={auth_token}";
+        console.log("Counter URL:", contadorUrl);
+
+        fetch(contadorUrl)
+          .then(response => {{
+            console.log("Counter GET Response Status:", response.status);
+            if (!response.ok) {{
+              if (response.status === 404) {{
+                console.log("Counter node not found (404), assuming 0.");
+                return 0;
+              }}
+              throw new Error(`Erro HTTP ao buscar contador: ${{response.status}}`);
+            }}
+            return response.json();
+          }})
+          .then(valorAtual => {{
+            console.log("Valor Atual recebido:", valorAtual);
+            const atual = parseInt(valorAtual) || 0;
+            const novoValor = atual + 1;
+            console.log(`Calculado: Atual=${{atual}}, Novo=${{novoValor}}`);
+            console.log("Enviando PUT para atualizar contador...");
+            return fetch(contadorUrl, {{
+              method: 'PUT',
+              headers: {{ 'Content-Type': 'application/json' }},
+              body: JSON.stringify(novoValor)
+            }});
+          }})
+          .then(putResponse => {{
+            console.log("Counter PUT Response Status:", putResponse.status);
+            if (!putResponse.ok) {{
+              throw new Error(`Erro HTTP ao atualizar contador (PUT): ${{putResponse.status}}`);
+            }}
+            console.log("Contador atualizado. Enviando PATCH para sinalizar batalha...");
+            return fetch("{FIREBASE_URL}/batalha_estado.json?auth={auth_token}", {{
+              method: 'PATCH',
+              headers: {{ 'Content-Type': 'application/json' }},
+              body: JSON.stringify({{ nova_batalha: true }})
+            }});
+          }})
+          .then(patchResponse => {{
+             console.log("Battle Signal PATCH Response Status:", patchResponse.status);
+             if (!patchResponse.ok) {{
+               throw new Error(`Erro HTTP ao sinalizar batalha (PATCH): ${{patchResponse.status}}`);
+             }}
+             console.log("Batalha sinalizada com sucesso!");
+          }})
+          .catch(error => {{
+             console.error("ERRO na cadeia de incremento/sinalização:", error);
+          }});
       }}
     }}
 
@@ -188,14 +231,5 @@ player_html = f"""
 st.title("🎵 Playlist da Batalha")
 components.html(player_html, height=420)
 
-col1, col2 = st.columns([1, 1])
-
-if col1.button("🔥 Iniciar nova batalha"):
-    if sinalizar_batalha(auth_token):
-        st.success("✅ Batalha sinalizada com sucesso!")
-        st.rerun()
-    else:
-        st.error("❌ Falha ao sinalizar batalha")
-
-# Controle de atualização automática
-st.session_state.auto_update = col2.checkbox("🔄 Auto-atualizar", value=st.session_state.auto_update)
+col1 = st.columns(1)[0]
+st.session_state.auto_update = col1.checkbox("🔄 Auto-atualizar", value=st.session_state.auto_update)
