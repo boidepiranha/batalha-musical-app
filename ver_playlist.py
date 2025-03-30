@@ -189,6 +189,18 @@ if videos_batalha_atual:
         if (event.data === YT.PlayerState.PLAYING) {{
           console.log("Player state: PLAYING, currentIndex:", currentIndex);
           atualizarStatusTocandoAgora(videoIds[currentIndex], videoTitles[currentIndex], currentIndex);
+
+          // <<< NOVO: Verifica se é o vídeo de contagem começando >>>
+          if (currentIndex === 2) {{
+            console.log("Vídeo de contagem (índice 2) iniciado. Sinalizando para preparar próxima batalha...");
+            const currentAuthToken = "{auth_token}";
+            fetch('{FIREBASE_URL}/batalha_estado/iniciar_proxima.json?auth=' + currentAuthToken, {{
+              method: 'PUT',
+              headers: {{ 'Content-Type': 'application/json' }},
+              body: JSON.stringify(true) // Define o sinalizador como true
+            }}).catch(error => console.error("Erro ao sinalizar iniciar_proxima:", error));
+          }}
+          // <<< FIM DA ADIÇÃO >>>
         }}
         if (event.data === YT.PlayerState.ENDED) {{
           console.log("Player state: ENDED, currentIndex before increment:", currentIndex);
@@ -224,75 +236,101 @@ if videos_batalha_atual:
 else:
     st.warning("Aguardando configuração da batalha no Firebase (videos_batalha_atual não definido). Inicie a próxima batalha.")
 
-# --- Controle da Próxima Batalha (Local) ---
-st.markdown("---")
-st.markdown("### 🎲 Próxima Batalha")
+# --- Funções de Lógica da Batalha ---
 
-if st.button("Iniciar Próxima Batalha / Realizar Sorteio"):
+def preparar_proxima_batalha(auth_token, playlists_artistas, estado_atual, estado_batalha):
+    """Executa sorteio, calcula papéis, seleciona vídeos e atualiza Firebase."""
+    incumbente = estado_atual.get("arena", [None, None])[0]
+    desafiadora = estado_atual.get("arena", [None, None])[1]
+    reserva = estado_atual.get("reserva")
+
     if not incumbente or not desafiadora or not reserva:
-        st.error("Estado inválido. Incumbente, Desafiadora e Reserva devem estar definidos no Firebase.")
+        st.error("Estado inválido para preparar batalha. Incumbente, Desafiadora e Reserva devem estar definidos.")
+        return False
+
+    # 1. Realizar Sorteio
+    vencedora = random.choice([incumbente, desafiadora])
+    perdedora = desafiadora if vencedora == incumbente else incumbente
+    st.success(f"🏆 Sorteio realizado! Vencedora: {vencedora}")
+
+    # 2. Calcular Novos Papéis
+    nova_incumbente = vencedora
+    nova_desafiadora = reserva
+    nova_reserva = perdedora
+
+    # 3. Selecionar Novos Vídeos Aleatórios + Contagem
+    try:
+        video_incumbente = random.choice(playlists_artistas[nova_incumbente.lower()])
+        video_desafiadora = random.choice(playlists_artistas[nova_desafiadora.lower()])
+        novos_videos_batalha = [video_incumbente, video_desafiadora]
+        novos_videos_batalha.append({
+            "videoId": VIDEO_CONTAGEM_ID,
+            "title": VIDEO_CONTAGEM_TITLE
+        })
+    except KeyError as e:
+        st.error(f"Erro ao selecionar vídeo: Artista '{e}' não encontrado nas playlists carregadas (verifique o nome/case).")
+        return False
+    except IndexError:
+         st.error(f"Erro ao selecionar vídeo: Lista de vídeos vazia para um dos artistas.")
+         return False
+
+    # 4. Atualizar Firebase
+    hoje = datetime.now().strftime("%Y-%m-%d")
+    # É mais seguro ler o contador atual ANTES de incrementar
+    contador_atual_hoje = estado_batalha.get("contador_diario", {}).get(hoje, 0)
+    novo_contador = contador_atual_hoje + 1
+
+    dados_status_atual = {
+        "arena": [nova_incumbente, nova_desafiadora],
+        "reserva": nova_reserva,
+        "vencedora_ultima_batalha": vencedora,
+        "videos_batalha_atual": novos_videos_batalha, # Contém 3 vídeos
+        "timestamp": datetime.now().isoformat(),
+        # Limpa 'tocando_agora' para a nova batalha
+        "tocando_agora": None
+    }
+
+    st.info(f"Atualizando Firebase para próxima batalha: Arena={nova_incumbente} vs {nova_desafiadora}, Reserva={nova_reserva}")
+    sucesso_status = atualizar_dados_firebase(auth_token, "status_atual", dados_status_atual)
+    sucesso_contador = atualizar_dados_firebase(auth_token, f"batalha_estado/contador_diario/{hoje}", novo_contador)
+
+    if sucesso_status and sucesso_contador:
+        st.success("Firebase atualizado com sucesso para próxima batalha!")
+        return True
     else:
-        # 1. Realizar Sorteio
-        vencedora = random.choice([incumbente, desafiadora])
-        perdedora = desafiadora if vencedora == incumbente else incumbente
-        st.success(f"🏆 Sorteio realizado! Vencedora: {vencedora}")
+        st.error("Falha ao atualizar o Firebase para próxima batalha.")
+        return False
 
-        # 2. Calcular Novos Papéis
-        nova_incumbente = vencedora
-        nova_desafiadora = reserva
-        nova_reserva = perdedora
+# --- Verificação do Sinalizador e Preparação Automática ---
+# Busca o estado do sinalizador
+sinal_iniciar = buscar_dados_firebase(auth_token, "batalha_estado/iniciar_proxima")
 
-        # 3. Selecionar Novos Vídeos Aleatórios + Contagem
-        try:
-            # Converte nomes para minúsculas ao acessar o dicionário
-            video_incumbente = random.choice(playlists_artistas[nova_incumbente.lower()])
-            video_desafiadora = random.choice(playlists_artistas[nova_desafiadora.lower()])
-            # Cria a lista inicial com os 2 vídeos da batalha
-            novos_videos_batalha = [video_incumbente, video_desafiadora]
-            # Adiciona o vídeo de contagem regressiva como terceiro item
-            novos_videos_batalha.append({
-                "videoId": VIDEO_CONTAGEM_ID,
-                "title": VIDEO_CONTAGEM_TITLE
-            })
+if sinal_iniciar is True: # Verifica explicitamente se é True
+    st.info("Sinal para iniciar próxima batalha detectado!")
+    # Reseta o sinalizador IMEDIATAMENTE
+    reset_ok = atualizar_dados_firebase(auth_token, "batalha_estado/iniciar_proxima", False)
 
-        except KeyError as e:
-            st.error(f"Erro ao selecionar vídeo: Artista '{e}' não encontrado nas playlists carregadas (verifique o nome/case).")
-            st.stop()
-        except IndexError:
-             # Não precisa mais da variável 'e' aqui, a mensagem é clara
-             st.error(f"Erro ao selecionar vídeo: Lista de vídeos vazia para um dos artistas.")
-             st.stop()
+    if reset_ok:
+        # Busca os dados MAIS RECENTES antes de preparar
+        estado_atual_recente = buscar_dados_firebase(auth_token, "status_atual")
+        estado_batalha_recente = buscar_dados_firebase(auth_token, "batalha_estado")
 
-        # 4. Atualizar Firebase
-        hoje = datetime.now().strftime("%Y-%m-%d")
-        novo_contador = batalhas_hoje + 1
-
-        # Prepara dados para atualizar /status_atual
-        dados_status_atual = {
-            "arena": [nova_incumbente, nova_desafiadora],
-            "reserva": nova_reserva,
-            "vencedora_ultima_batalha": vencedora,
-            "videos_batalha_atual": novos_videos_batalha, # Agora contém 3 vídeos
-            "timestamp": datetime.now().isoformat()
-        }
-
-        # Prepara dados para atualizar /batalha_estado (apenas contador)
-        # É mais seguro ler o contador de novo antes de incrementar para evitar race conditions, mas simplificando aqui
-        dados_contador = {hoje: novo_contador}
-
-        st.info(f"Atualizando Firebase: Arena={nova_incumbente} vs {nova_desafiadora}, Reserva={nova_reserva}")
-
-        sucesso_status = atualizar_dados_firebase(auth_token, "status_atual", dados_status_atual)
-        sucesso_contador = atualizar_dados_firebase(auth_token, f"batalha_estado/contador_diario/{hoje}", novo_contador)
-
-        if sucesso_status and sucesso_contador:
-            st.success("Firebase atualizado com sucesso! Recarregando...")
-            time.sleep(1) # Pequena pausa para garantir que o Firebase processe
-            st.rerun()
+        if estado_atual_recente and estado_batalha_recente:
+            sucesso_preparacao = preparar_proxima_batalha(
+                auth_token, playlists_artistas, estado_atual_recente, estado_batalha_recente
+            )
+            if sucesso_preparacao:
+                st.info("Preparação concluída. Recarregando para iniciar a nova batalha...")
+                time.sleep(2) # Pausa um pouco maior para garantir
+                st.rerun()
+            else:
+                st.error("Falha na preparação automática da próxima batalha.")
         else:
-            st.error("Falha ao atualizar o Firebase.")
+            st.error("Não foi possível buscar estado recente antes da preparação automática.")
+    else:
+        st.error("Falha ao resetar o sinalizador iniciar_proxima no Firebase!")
 
-# Exibe controle de auto-atualização de forma mais visível
+# --- Configurações --- (Mantido)
 st.markdown("---")
 st.markdown("### ⚙️ Configurações")
 st.session_state.auto_update = st.checkbox("🔄 Auto-atualizar", value=st.session_state.auto_update)
