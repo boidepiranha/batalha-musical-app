@@ -5,7 +5,7 @@ import requests
 import os
 from dotenv import load_dotenv
 import time
-from datetime import datetime, UTC
+from datetime import datetime
 import logging
 
 # --- Logging Configuration to Suppress Secrets Warning ---
@@ -61,25 +61,10 @@ def buscar_status_atual(token):
     return res.json()
 
 def buscar_contador_diario(token):
-    # Use timezone-aware UTC datetime object (modern approach)
-    hoje = datetime.now(UTC).strftime("%Y-%m-%d")
+    hoje = datetime.now().strftime("%Y-%m-%d")
     url = f"{FIREBASE_URL}/batalha_estado/contador_diario/{hoje}.json?auth={token}"
-    try:
-        res = requests.get(url)
-        res.raise_for_status() # Check for HTTP errors
-        # Handle case where node exists but is null, or doesn't exist (res.json() might be None or raise error on 404 if raise_for_status isn't hit)
-        return res.json() or 0
-    except requests.exceptions.RequestException as e:
-        # If the node doesn't exist (404), return 0. Otherwise log warning.
-        if e.response is not None and e.response.status_code == 404:
-            return 0
-        else:
-            st.warning(f"Aviso: Não foi possível buscar contador diário: {e}")
-            return 0 # Fallback to 0 on other errors
-    except ValueError:
-        # Handle cases where response is not valid JSON
-        st.warning("Aviso: Resposta inválida ao buscar contador diário (não JSON).")
-        return 0
+    res = requests.get(url)
+    return res.json() or 0
 
 try:
     auth_token = gerenciar_token_firebase()
@@ -119,117 +104,117 @@ for i, v in enumerate(status.get("videos_playlist", [])):
 st.sidebar.caption(f"🕒 Última batalha: {status.get('timestamp', '---')}")
 st.sidebar.caption(f"📊 Batalhas hoje: {batalhas_hoje} de 50")
 
-playlist_id = "PLCcM9n2mu2uHA6fuInzsrEOhiTq7Dsd97"
+videos = status.get("videos_playlist", [])
+video_ids = [v["videoId"] for v in videos]
+video_titles = [v["title"] for v in videos]
 
 player_html = f"""
-<div id=\"player\"></div>
+<div id="player"></div>  <!-- O DIV que a API vai usar -->
+
 <script>
   var tag = document.createElement('script');
-  tag.src = \"https://www.youtube.com/iframe_api\";
+  tag.src = "https://www.youtube.com/iframe_api";
   var firstScriptTag = document.getElementsByTagName('script')[0];
   firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
 
-  var player;
+  const videoIds = {video_ids};
+  const videoTitles = {video_titles};
+  let currentIndex = 0; // Usar 'currentIndex' para evitar conflito com 'player.index' se existir
+  var player; // Variável global para o objeto player
+
   function onYouTubeIframeAPIReady() {{
-    player = new YT.Player('player', {{
+    player = new YT.Player('player', {{ // Diz à API para usar o div#player
       height: '394',
       width: '700',
+      videoId: videoIds[0], // Carrega o primeiro vídeo diretamente
       playerVars: {{
-        listType: 'playlist',
-        list: '{playlist_id}',
-        autoplay: 1,
-        controls: 1
+        // 'autoplay': 1, // Autoplay ainda é problemático, melhor iniciar via JS se necessário
+        'controls': 1,
+        'enablejsapi': 1 // Essencial para controle via JS
       }},
       events: {{
+        'onReady': onPlayerReady, // Adicionado evento onReady
         'onStateChange': onPlayerStateChange
       }}
     }});
   }}
 
+  // Função chamada quando o player está pronto
+  function onPlayerReady(event) {{
+    // Você PODE tentar iniciar o vídeo aqui, mas pode ser bloqueado pelo navegador
+    // event.target.playVideo();
+    atualizarStatus(videoIds[currentIndex], videoTitles[currentIndex], currentIndex);
+  }}
+
+  // Função chamada quando o estado do player muda
   function onPlayerStateChange(event) {{
+    // Quando um vídeo começa a tocar (incluindo após loadVideoById)
     if (event.data === YT.PlayerState.PLAYING) {{
-      const index = player.getPlaylistIndex();
-      const videoData = {{
-        index: index,
-        videoId: player.getVideoData().video_id,
-        title: player.getVideoData().title,
-        timestamp: new Date().toISOString()
-      }};
-
-      fetch("{FIREBASE_URL}/status_atual/tocando_agora.json?auth={auth_token}", {{
-        method: 'PUT',
-        headers: {{ 'Content-Type': 'application/json' }},
-        body: JSON.stringify(videoData)
-      }});
-
-      if (index === 2) {{
-        console.log("Index 2 detected. Attempting to increment counter and signal battle...");
-        const hoje = new Date().toISOString().split('T')[0];
-        const contadorUrl = "{FIREBASE_URL}/batalha_estado/contador_diario/" + hoje + ".json?auth={auth_token}";
-        console.log("Counter URL:", contadorUrl);
-
-        fetch(contadorUrl)
-          .then(response => {{
-            console.log("Counter GET Response Status:", response.status);
-            if (!response.ok) {{
-              if (response.status === 404) {{
-                console.log("Counter node not found (404), assuming 0.");
-                return 0;
-              }}
-              throw new Error(`Erro HTTP ao buscar contador: ${{response.status}}`);
-            }}
-            return response.json();
-          }})
-          .then(valorAtual => {{
-            console.log("Valor Atual recebido:", valorAtual);
-            const atual = parseInt(valorAtual) || 0;
-            const novoValor = atual + 1;
-            console.log(`Calculado: Atual=${{atual}}, Novo=${{novoValor}}`);
-            console.log("Enviando PUT para atualizar contador...");
-            return fetch(contadorUrl, {{
-              method: 'PUT',
-              headers: {{ 'Content-Type': 'application/json' }},
-              body: JSON.stringify(novoValor)
-            }});
-          }})
-          .then(putResponse => {{
-            console.log("Counter PUT Response Status:", putResponse.status);
-            if (!putResponse.ok) {{
-              throw new Error(`Erro HTTP ao atualizar contador (PUT): ${{putResponse.status}}`);
-            }}
-            console.log("Contador atualizado. Enviando PATCH para sinalizar batalha...");
-            return fetch("{FIREBASE_URL}/batalha_estado.json?auth={auth_token}", {{
-              method: 'PATCH',
-              headers: {{ 'Content-Type': 'application/json' }},
-              body: JSON.stringify({{ nova_batalha: true }})
-            }});
-          }})
-          .then(patchResponse => {{
-             console.log("Battle Signal PATCH Response Status:", patchResponse.status);
-             if (!patchResponse.ok) {{
-               throw new Error(`Erro HTTP ao sinalizar batalha (PATCH): ${{patchResponse.status}}`);
-             }}
-             console.log("Batalha sinalizada com sucesso!");
-          }})
-          .catch(error => {{
-             console.error("ERRO na cadeia de incremento/sinalização:", error);
-          }});
-      }}
+      // Garante que estamos atualizando com o índice correto que ACABOU de começar
+      atualizarStatus(videoIds[currentIndex], videoTitles[currentIndex], currentIndex);
     }}
 
+    // Quando um vídeo termina
     if (event.data === YT.PlayerState.ENDED) {{
-      const index = player.getPlaylistIndex();
-      const total = player.getPlaylist().length;
-      if (index === total - 1) {{
+      currentIndex++;
+      if (currentIndex < videoIds.length) {{
+        player.loadVideoById(videoIds[currentIndex]); // Carrega o próximo vídeo
+      }} else {{
+        // Último vídeo terminou, recarrega a página
+        currentIndex = 0; // Reseta para talvez evitar recarga imediata se algo der errado
         setTimeout(() => location.reload(), 1500);
       }}
     }}
   }}
+
+  // Função para atualizar o Firebase (semelhante à sua)
+  function atualizarStatus(videoId, title, index) {{
+    const data = {{
+      videoId: videoId,
+      title: title,
+      index: index,
+      timestamp: new Date().toISOString()
+    }};
+    const currentAuthToken = "{auth_token}"; // Usa o token passado pelo Python
+
+    fetch('{FIREBASE_URL}/status_atual/tocando_agora.json?auth=' + currentAuthToken, {{
+      method: 'PUT',
+      headers: {{ 'Content-Type': 'application/json' }},
+      body: JSON.stringify(data)
+    }}).catch(error => console.error("Erro ao atualizar status:", error)); // Adicionado catch básico
+
+    if (index === 2) {{
+      const hoje = new Date().toISOString().split('T')[0];
+      const contadorUrl = '{FIREBASE_URL}/batalha_estado/contador_diario/' + hoje + '.json?auth=' + currentAuthToken;
+
+      fetch(contadorUrl)
+        .then(response => response.ok ? response.json() : 0)
+        .then(valorAtual => {{
+          const novoValor = (valorAtual || 0) + 1;
+          return fetch(contadorUrl, {{
+            method: 'PUT',
+            headers: {{ 'Content-Type': 'application/json' }},
+            body: JSON.stringify(novoValor)
+          }});
+        }})
+        .then(() => {{
+          return fetch('{FIREBASE_URL}/batalha_estado.json?auth=' + currentAuthToken, {{
+            method: 'PATCH',
+            headers: {{ 'Content-Type': 'application/json' }},
+            body: JSON.stringify({{ nova_batalha: true }})
+          }});
+        }})
+        .catch(error => console.error("Erro ao sinalizar batalha:", error));
+    }}
+  }}
+
 </script>
 """
 
 st.title("🎵 Playlist da Batalha")
 components.html(player_html, height=420)
 
-col1 = st.columns(1)[0]
-st.session_state.auto_update = col1.checkbox("🔄 Auto-atualizar", value=st.session_state.auto_update)
+# Exibe controle de auto-atualização de forma mais visível
+st.markdown("---")
+st.markdown("### ⚙️ Configurações")
+st.session_state.auto_update = st.checkbox("🔄 Auto-atualizar", value=st.session_state.auto_update)
