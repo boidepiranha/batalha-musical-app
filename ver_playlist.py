@@ -139,7 +139,7 @@ else:
 st.sidebar.markdown("---")
 st.sidebar.markdown("### 🥊 Batalha Atual")
 st.sidebar.write(f"**Incumbente:** {incumbente or '?'}")
-st.sidebar.write(f"**Desafiadora:** {desafiadora or '?'}")
+st.sidebar.write(f"**Desafiante:** {desafiadora or '?'}")
 st.sidebar.write(f"**Reserva:** {reserva or '?'}")
 st.sidebar.write(f"**Vencedora anterior:** {estado_atual.get('vencedora_ultima_batalha', '?')}")
 st.sidebar.write("**Vídeos da Batalha:**")
