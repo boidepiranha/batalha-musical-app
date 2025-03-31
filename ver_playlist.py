@@ -176,12 +176,13 @@ if videos_batalha_atual:
           height: '394',
           width: '700',
           videoId: videoIds[0],
-          playerVars: {{ 'controls': 1, 'enablejsapi': 1 }},
+          playerVars: {{ 'controls': 1, 'enablejsapi': 1, 'autoplay': 1 }},
           events: {{ 'onReady': onPlayerReady, 'onStateChange': onPlayerStateChange }}
         }});
       }}
 
       function onPlayerReady(event) {{
+        event.target.playVideo();
         atualizarStatusTocandoAgora(videoIds[currentIndex], videoTitles[currentIndex], currentIndex);
       }}
 
