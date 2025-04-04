@@ -1,27 +1,42 @@
 [
   {
-    "title": "ROMA TUZ - ДУРА",
-    "videoId": "FPFWZTgEE3g",
-    "published": "2025-03-27T10:25:05Z"
+    "videoId":"FPFWZTgEE3g",
+    "title":"ROMA TUZ - ДУРА",
+    "publishedAt":"2025-03-12T22:00:19Z",
+    "channelTitle":"ROMA TUZ",
+    "duration_sec":143,
+    "language":"en"
   },
   {
-    "title": "ROMA TUZ - НА БАЛКОНІ",
-    "videoId": "fA2Yp0Iew2E",
-    "published": "2025-03-27T10:25:14Z"
+    "videoId":"fA2Yp0Iew2E",
+    "title":"ROMA TUZ - НА БАЛКОНІ",
+    "publishedAt":"2024-12-08T22:00:30Z",
+    "channelTitle":"ROMA TUZ",
+    "duration_sec":179,
+    "language":"ru"
   },
   {
-    "title": "ROMA TUZ - ВІДЧУТИ",
-    "videoId": "j8KjOeT-l20",
-    "published": "2025-03-27T10:25:21Z"
+    "videoId":"j8KjOeT-l20",
+    "title":"ROMA TUZ - ВІДЧУТИ",
+    "publishedAt":"2024-07-02T21:00:34Z",
+    "channelTitle":"ROMA TUZ",
+    "duration_sec":142,
+    "language":"en"
   },
   {
-    "title": "ROMA TUZ - БАТАРЕЯ",
-    "videoId": "0CPoy7hn-vM",
-    "published": "2025-03-27T10:25:28Z"
+    "videoId":"0CPoy7hn-vM",
+    "title":"ROMA TUZ - БАТАРЕЯ",
+    "publishedAt":"2024-04-18T21:00:00Z",
+    "channelTitle":"ROMA TUZ",
+    "duration_sec":180,
+    "language":"en"
   },
   {
-    "title": "ROMA TUZ - АВТОМАТ",
-    "videoId": "cE11ggUcC6Q",
-    "published": "2025-03-29T21:05:18Z"
+    "videoId":"cE11ggUcC6Q",
+    "title":"ROMA TUZ - АВТОМАТ",
+    "publishedAt":"2023-01-17T10:00:10Z",
+    "channelTitle":"ROMA TUZ",
+    "duration_sec":184,
+    "language":"en"
   }
-] 
+]

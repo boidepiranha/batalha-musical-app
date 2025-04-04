@@ -1,52 +1,47 @@
 [
   {
-    "title": "MIRAVI - Жду тебя (Official Music Video, 2025)",
-    "videoId": "bS0OEZssnTo",
-    "published": "2025-03-24T23:50:22Z"
+    "videoId":"bS0OEZssnTo",
+    "title":"MIRAVI - Жду тебя (Official Music Video, 2025)",
+    "publishedAt":"2025-02-23T15:05:13Z",
+    "channelTitle":"VLADA MIRAVI",
+    "duration_sec":177,
+    "language":"ru",
+    "artist":"Vlada Miravi"
   },
   {
-    "title": "MIRAVI - Жду тебя (Music)",
-    "videoId": "OEWZEP7CiF8",
-    "published": "2025-03-24T23:50:34Z"
+    "videoId":"EuuKjkNHD9k",
+    "title":"Vlada MIRAVI - Воля (Live in Moscow, 2024)",
+    "publishedAt":"2025-01-09T15:13:24Z",
+    "channelTitle":"VLADA MIRAVI",
+    "duration_sec":192,
+    "language":"ru",
+    "artist":"Vlada Miravi"
   },
   {
-    "title": "MIRAVI, Полина Гагарина - Опять метель (Live)",
-    "videoId": "RKMBtGLGKGk",
-    "published": "2025-03-24T23:50:46Z"
+    "videoId":"Jy-bMj7gj6s",
+    "title":"Vlada MIRAVI - More (Live in Moscow, 2024)",
+    "publishedAt":"2025-01-08T14:26:27Z",
+    "channelTitle":"VLADA MIRAVI",
+    "duration_sec":194,
+    "language":"ru",
+    "artist":"Vlada Miravi"
   },
   {
-    "title": "Vlada MIRAVI - Рябина (Live in Moscow, 2024)",
-    "videoId": "9aRZBOX2T7w",
-    "published": "2025-03-24T23:50:57Z"
+    "videoId":"kvLgLSDBuV4",
+    "title":"Vlada MIRAVI - Полюшко (Live in Moscow, 2024)",
+    "publishedAt":"2025-01-06T18:39:06Z",
+    "channelTitle":"VLADA MIRAVI",
+    "duration_sec":165,
+    "language":"ru",
+    "artist":"Vlada Miravi"
   },
   {
-    "title": "Vlada MIRAVI - Воля (Live in Moscow, 2024)",
-    "videoId": "EuuKjkNHD9k",
-    "published": "2025-03-24T23:51:06Z"
-  },
-  {
-    "title": "Vlada MIRAVI - More (Live in Moscow, 2024)",
-    "videoId": "Jy-bMj7gj6s",
-    "published": "2025-03-24T23:51:13Z"
-  },
-  {
-    "title": "Vlada MIRAVI - За речкой (Live in Moscow, 2024)",
-    "videoId": "1fs1ojtHTwI",
-    "published": "2025-03-24T23:51:20Z"
-  },
-  {
-    "title": "Vlada MIRAVI - Полюшко (Live in Moscow, 2024)",
-    "videoId": "kvLgLSDBuV4",
-    "published": "2025-03-24T23:51:26Z"
-  },
-  {
-    "title": "Vlada MIRAVI - Вселенная (Live in Moscow, 2024)",
-    "videoId": "6ZRruyL2em0",
-    "published": "2025-03-24T23:51:31Z"
-  },
-  {
-    "title": "МУЗ.ЛИТ: MIRAVI - Воля [Live]",
-    "videoId": "_yF-gGXLJm4",
-    "published": "2025-03-26T19:41:13Z"
+    "videoId":"6ZRruyL2em0",
+    "title":"Vlada MIRAVI - Вселенная (Live in Moscow, 2024)",
+    "publishedAt":"2025-01-06T15:00:05Z",
+    "channelTitle":"VLADA MIRAVI",
+    "duration_sec":172,
+    "language":"ru",
+    "artist":"Vlada Miravi"
   }
-] 
+]
