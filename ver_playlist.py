@@ -32,7 +32,7 @@ EMAIL = get_secret("FIREBASE_EMAIL")
 SENHA = get_secret("FIREBASE_SENHA")
 API_KEY = get_secret("FIREBASE_API_KEY")
 FIREBASE_URL = get_secret("FIREBASE_DB_URL", "https://batalha-musical-default-rtdb.firebaseio.com")
-ARTISTAS = ["brazil", "russia", "ukraine"]
+ARTISTAS = ["brazil", "belgium", "ukraine"]
 # Detalhes do vídeo de contagem regressiva
 VIDEO_CONTAGEM_ID = "FUKmyRLOlAA"
 VIDEO_CONTAGEM_TITLE = "10 Seconds Countdown Timer"
